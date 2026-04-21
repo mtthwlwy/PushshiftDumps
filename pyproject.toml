@@ -1,0 +1,147 @@
+[project]
+name = "reddit"
+version = "0.0.0"
+description = "Add your description here"
+authors = [
+  { name = "Matthew Leong", email = "matthew.leong@bankofengland.co.uk" },
+]
+readme = "README.md"
+
+requires-python = ">=3.11"
+
+dependencies = [
+    "requests",
+    "scipy",
+    "zstandard",
+    "pymongo",
+    "sortedcontainers",
+    "praw",
+    "multiprocessing-logging",
+]
+
+[dependency-groups]
+dev = [
+  "ipykernel",
+  "jupyter",
+  "ruff",
+  "ty",
+]
+
+[[tool.uv.index]]
+name = "main"
+url = "https://binarycentral.jfrog.io/artifactory/api/pypi/pypi-pythonhosted-remote/simple"
+default = true
+
+[[tool.uv.index]]
+name = "sup"
+url = "https://binarycentral.jfrog.io/artifactory/api/pypi/pypi-common-boe-prod-local/simple"
+
+[tool.ruff]
+target-version = "py310"
+exclude = ["exploration/*"]
+extend-include = ["*.ipynb"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = 20
+
+[tool.ruff.lint]
+select = [
+    "W",
+    "E4",
+    "E7",
+    "E9",
+    "W291",
+    "YTT",
+    "T10",
+    "ICN",
+    "INP",
+    "Q",
+    "RSE",
+    "SLOT",
+    "INT",
+    "FLY",
+    "LOG",
+    "T20",
+    "D",
+    "RET",
+    "PD",
+    "N",
+    "PIE",
+    "SIM",
+    "S",
+    "G",
+    "ERA",
+    "ASYNC",
+    "TID",
+    "UP",
+    "SLF",
+    "BLE",
+    "C4",
+    "I",
+    "F",
+    "A",
+    "ARG",
+    "PTH",
+    "RUF",
+    "B",
+    "TCH",
+    "DTZ",
+    "PYI",
+    "PT",
+    "EM",
+    "TRY",
+    "PERF",
+    # "C901", # too complex
+    # "FBT", # use named arguments for boolean flags
+    # "TD", # todos
+    # "FIX", # fixme
+    # "FURB" # preview rules
+    # ANN # Type annotations, re-enable when we get bandwidth
+]
+ignore = [
+    "D100",
+    "D104",
+    "D105",
+    "D107",
+    "D205",
+    "D401",
+    "DTZ007",
+    "T201",
+    "UP045", # Allow Optional type
+    "PERF203",
+    "S301", # Allow use of pickle files
+
+    #D100, # Missing docstring in public module
+    #D104, # Missing docstring in public package
+    #D105, # Missing docstring in magic method
+    #D107, # Missing docstring in __init__
+    #D205, # 1 blank line required between summary line and description
+    #D401, # First line should be in imperative mood
+    #I001, # isort found an import in the wrong position
+    #DTZ007, # Allow use of naive datetime
+    #T201, # allow use of print
+    #PERF203, # Allow try except in a loop
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["S", "D", "ANN", "T201", "ASYNC", "ARG", "PTH", "TRY", "PD901", "PT022", "ERA001"]
+
+[tool.ruff.lint.flake8-builtins]
+builtins-ignorelist = ["input", "id", "bytes"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ty.src]
+include = ["src"]
+exclude = ["**/node_modules", "**/__pycache__", "**/tests", "*.ipynb"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+timeout = 600
+# log_cli = true
+# log_cli_level = "INFO"
