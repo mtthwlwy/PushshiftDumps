@@ -1,0 +1,14 @@
+input_folder: ""
+output_folder: ""
+working_folder: "pushshift_working"
+field: "subreddit"
+value: ""
+value_list: "subreddits.txt"
+processes: 10
+file_filter: "^RC_|^RS_"
+split_intermediate: false
+single_output: false
+error_rate: 1
+debug: false
+partial: false
+regex: false
