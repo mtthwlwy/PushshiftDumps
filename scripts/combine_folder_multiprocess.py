@@ -29,6 +29,7 @@ from collections import defaultdict
 from enum import Enum
 from pathlib import Path
 
+import yaml
 import zstandard
 
 # sets up logging to the console as well as a file
@@ -317,75 +318,62 @@ def process_file(file, queue, field, values, partial, regex, split_intermediate)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Use multiple processes to decompress and iterate over pushshift dump files")
-    parser.add_argument("input", help="The input folder to recursively read files from")
-    parser.add_argument("--output", help="Put the output files in this folder", default="")
-    parser.add_argument("--working", help="The folder to store temporary files in", default="pushshift_working")
-    parser.add_argument("--field", help="When deciding what lines to keep, use this field for comparisons", default="subreddit")
-    parser.add_argument("--value", help="When deciding what lines to keep, compare the field to this value. Supports a comma separated list. This is case sensitive", default="pushshift")
-    parser.add_argument("--value_list", help="A file of newline separated values to use. Overrides the value param if it is set", default=None)
-    parser.add_argument("--processes", help="Number of processes to use", default=10, type=int)
-    parser.add_argument("--file_filter", help="Regex filenames have to match to be processed", default="^RC_|^RS_")
-    parser.add_argument(
-        "--split_intermediate",
-        help="Split the intermediate files by the first letter of the matched field, use if the filter will result in a large number of separate files",
-        action="store_true")
-    parser.add_argument(
-        "--single_output",
-        help="Output a single combined file instead of splitting by the search term",
-        action="store_true")
-    parser.add_argument(
-        "--error_rate", help=
-        "Percentage as an integer from 0 to 100 of the lines where the field can be missing. For the subreddit field especially, "
-        "there are a number of posts that simply don't have a subreddit attached", default=1, type=int)
-    parser.add_argument("--debug", help="Enable debug logging", action="store_const", const=True, default=False)
-    parser.add_argument(
-        "--partial", help="The values only have to be contained in the field, not match exactly. If this is set, "
-        "the output files are not split by value. WARNING: This can severely slow down the script, especially if searching the "
-        "body.", action="store_const", const=True, default=False)
-    parser.add_argument(
-        "--regex", help="The values are treated as regular expressions. If this is set, "
-        "the output files are not split by value. WARNING: This can severely slow down the script, especially if searching the "
-        "body. If set, ignores the --partial flag", action="store_const", const=True, default=False)
+    # "Use multiple processes to decompress and iterate over pushshift dump files"
+    with Path("config.yaml").open() as config_file:
+        config = yaml.safe_load(config_file)
+    input = config["input"] # "The input folder to recursively read files from"
+    output = config["output"] # "Put the output files in this folder"
+    working = config["working"] # "The folder to store temporary files in"
+    value = config["value"] # "When deciding what lines to keep, compare the field to this value. Supports a comma separated list. This is case sensitive"
+    value_list = config["value_list"] # "A file of newline separated values to use. Overrides the value param if it is set"
+    with Path(value_list).open() as file:
+        values = [line.strip() for line in file]
+    processes = config["processes"] # "Number of processes to use"
+    file_filter = config["file_filter"] # Regex filenames have to match to be processed
+    split_intermediate = config["split_intermediate"] # "Split the intermediate files by the first letter of the matched field, use if the filter will result in a large number of separate files"
+    single_output = config["single_output"] # "Output a single combined file instead of splitting by the search term"
+    error_rate = config["error_rate"] # "Percentage as an integer from 0 to 100 of the lines where the field can be missing. For the subreddit field especially, there are a number of posts that simply don't have a subreddit attached"
+    debug = config["debug"] # "Enable debug logging"
+    partial= config["partial"] # "The values only have to be contained in the field, not match exactly. If this is set, the output files are not split by value. WARNING: This can severely slow down the script, especially if searching the body."
+    regex = config["regex"] # "The values are treated as regular expressions. If this is set, the output files are not split by value. WARNING: This can severely slow down the script, especially if searching the body. If set, ignores the --partial flag"
+
     script_type = "split"
+    arg_string = f'{config["field"]}:{(config["value"] if config["value"] else config["value_list"])}'
 
-    args = parser.parse_args()
-    arg_string = f"{args.field}:{(args.value if args.value else args.value_list)}"
-
-    if args.debug:
+    if config["debug"]:
         log.setLevel(logging.DEBUG)
 
-    msg= f"Loading files from: {args.input}"
+    msg= f'Loading files from: {config["input_folder"]}'
     log.info(msg)
-    if args.output:
-        msg = f"Writing output to: {args.output}"
+    if config["output_folder"]:
+        msg = f'Writing output to: {config["output_folder"]}'
         log.info(msg)
     else:
         log.info("Writing output to working folder")
 
-    if (args.partial or args.regex or args.single_output) and args.split_intermediate:
+    if (config["partial"] or config["regex"] or config["single_output"]) and config["split_intermediate"]:
         log.info("The partial, regex and single_output flags are not compatible with the split_intermediate flag")
         sys.exit(1)
 
     values = set()
-    if args.value_list:
-        msg = f"Reading {args.value_list} for values to compare"
+    if config["value_list"]:
+        msg = f'Reading {config["value_list"]} for values to compare'
         log.info(msg)
-        with Path(args.value_list).open() as value_list_handle:
+        with Path(config["value_list"]).open() as value_list_handle:
             for line in value_list_handle:
                 values.add(line)
 
     else:
-        values = set(args.value.split(","))
+        values = set(config["value"].split(","))
 
-    if args.regex:
+    if config["regex"]:
         regexes = [re.compile(reg) for reg in values]
         values = regexes
         if len(values) > 1:
-            msg = f"Checking field {args.field} against {len(values)} regexes"
+            msg = f"Checking field {config['field']} against {len(values)} regexes"
             log.info(msg)
         else:
-            msg = f"Checking field {args.field} against regex {values[0]}"
+            msg = f"Checking field {config['field']} against regex {values[0]}"
             log.info(msg)
     else:
         lower_values = set()
@@ -398,19 +386,19 @@ if __name__ == "__main__":
             val_string = f"the value {(','.join(values))}"
         else:
             val_string = f"any of the values {(','.join(values))}"
-        if args.partial:
-            msg = f"Checking if any of {val_string} are contained in field {args.field}"
+        if config["partial"]:
+            msg = f"Checking if any of {val_string} are contained in field {config['field']}"
             log.info(msg)
         else:
-            msg = f"Checking if any of {val_string} exactly match field {args.field}"
+            msg = f"Checking if any of {val_string} exactly match field {config['field']}"
             log.info(msg)
 
-    if args.partial or args.regex or args.single_output:
+    if config["partial"] or config["regex"] or config["single_output"]:
         log.info("Outputing to a single combined file")
 
     multiprocessing.set_start_method("spawn")
     queue = multiprocessing.Manager().Queue()
-    status_json = Path(args.working) / "status.json"
+    status_json = Path(config["working"]) / "status.json"
     input_files, saved_arg_string, saved_type, completed_prefixes = load_file_list(status_json)
     if saved_arg_string and saved_arg_string != arg_string:
         log.warning("Args don't match args from json file. Delete working folder")
@@ -423,18 +411,18 @@ if __name__ == "__main__":
     # if the file list wasn't loaded from the json, this is the first run, find what files we need to process
     if input_files is None:
         input_files = []
-        for subdir, _dirs, files in os.walk(args.input):
+        for subdir, _dirs, files in os.walk(config["input"]):
             files.sort()
             for file_name in files:
-                if file_name.endswith(".zst") and re.search(args.file_filter, file_name) is not None:
+                if file_name.endswith(".zst") and re.search(config["file_filter"], file_name) is not None:
                     input_path = Path(subdir) / file_name
-                    output_extension = "" if args.split_intermediate else ".zst"
-                    output_path = Path(args.working) / f"{file_name[:-4]}{output_extension}"
+                    output_extension = "" if config["split_intermediate"] else ".zst"
+                    output_path = Path(config["working"]) / f"{file_name[:-4]}{output_extension}"
                     input_files.append(FileConfig(input_path, output_path=output_path))
 
-        save_file_list(input_files, args.working, status_json, arg_string, script_type)
+        save_file_list(input_files, config["working"], status_json, arg_string, script_type)
     else:
-        msg = f"Existing input file was read, if this is not correct you should delete the {args.working} folder and run this script again"
+        msg = f"Existing input file was read, if this is not correct you should delete the {config['working']} folder and run this script again"
         log.info(msg)
 
     files_processed, total_bytes, total_bytes_processed, total_lines_processed, total_lines_matched, total_lines_errored = 0, 0, 0, 0, 0, 0
@@ -464,8 +452,8 @@ if __name__ == "__main__":
             msg = f"Processing file: {file.input_path}"
             log.info(msg)
         # start the workers
-        with multiprocessing.Pool(processes=min(args.processes, len(files_to_process))) as pool:
-            workers = pool.starmap_async(process_file, [(file, queue, args.field, values, args.partial, args.regex, args.split_intermediate) for file in files_to_process], chunksize=1, error_callback=log.info)
+        with multiprocessing.Pool(processes=min(config["processes"], len(files_to_process))) as pool:
+            workers = pool.starmap_async(process_file, [(file, queue, config["field"], values, config["partial"], config["regex"], config["split_intermediate"]) for file in files_to_process], chunksize=1, error_callback=log.info)
             while not workers.ready() or not queue.empty():
                 # loop until the workers are all done, pulling in status messages as they are sent
                 file_update = queue.get()
@@ -493,7 +481,7 @@ if __name__ == "__main__":
                     files_processed += 1 if file.complete or file.error_message is not None else 0
                     files_errored += 1 if file.error_message is not None else 0
                 if file_update.complete or file_update.error_message is not None:
-                    save_file_list(input_files, args.working, status_json, arg_string, script_type)
+                    save_file_list(input_files, config["working"], status_json, arg_string, script_type)
                     msg = f"Finished file: {file_update.input_path} : {file_update.file_size:,}"
                     log.debug(msg)
                 current_time = time.time()
@@ -530,13 +518,13 @@ if __name__ == "__main__":
                 log.info(msg)
             count_incomplete += 1
         else:
-            if file.error_lines > file.lines_processed * (args.error_rate * 0.01):
+            if file.error_lines > file.lines_processed * (config["error_rate"] * 0.01):
                 msg = f"""File {file.input_path} has {file.error_lines:,} errored lines out of {file.lines_processed:,},
-                    {(file.error_lines / file.lines_processed) * (args.error_rate * 0.01):.2f}% which is above the limit of {args.error_rate}%"""
+                    {(file.error_lines / file.lines_processed) * (config["error_rate"] * 0.01):.2f}% which is above the limit of {config["error_rate"]}%"""
                 log.info(msg)
                 count_incomplete += 1
             elif file.output_path is not None and Path(file.output_path).exists():
-                input_handle = FileHandle(file.output_path, is_split=args.split_intermediate)
+                input_handle = FileHandle(file.output_path, is_split=config["split_intermediate"])
                 for path in input_handle.get_paths():
                     prefixes.add(path[-FileHandle.ext_len - 1:-FileHandle.ext_len])
                     count_intermediate_files += 1
@@ -557,7 +545,7 @@ if __name__ == "__main__":
     output_handles = {}
     files_combined = 0
     split = bool(values)
-    if args.split_intermediate:
+    if config["split_intermediate"]:
         for prefix in sorted(prefixes):
             msg= f"From {files_combined}/{count_intermediate_files} files to {len(output_handles):,} output handles : {output_lines:,}/{total_lines_matched:,} lines"
             log.info(msg)
@@ -570,13 +558,13 @@ if __name__ == "__main__":
                             files_combined += 1
                         output_lines += 1
                         obj = json.loads(line)
-                        observed_case = obj[args.field]
+                        observed_case = obj[config["field"]]
                         observed = observed_case.lower()
                         if observed not in output_handles:
-                            if args.output:
-                                if not Path(args.output).exists():
-                                    Path(args.output).mkdir(parents=True, exist_ok=True)
-                                output_file_path = Path(args.output) / f"{observed_case}_{FileType.to_str(file_type)}.zst"
+                            if config["output"]:
+                                if not Path(config["output"]).exists():
+                                    Path(config["output"]).mkdir(parents=True, exist_ok=True)
+                                output_file_path = Path(config["output"]) / f"{observed_case}_{FileType.to_str(file_type)}.zst"
                             else:
                                 output_file_path = f"{observed_case}_{FileType.to_str(file_type)}.zst"
                             msg = f"Writing to file {output_file_path}"
@@ -594,7 +582,7 @@ if __name__ == "__main__":
                     handle.close()
                 output_handles = {}
             completed_prefixes.add(prefix)
-            save_file_list(input_files, args.working, status_json, arg_string, script_type, completed_prefixes)
+            save_file_list(input_files, config["working"], status_json, arg_string, script_type, completed_prefixes)
 
     else:
         msg = f"From {files_combined}/{count_intermediate_files} files to {len(output_handles):,} output handles : {output_lines:,}/{total_lines_matched:,} lines"
@@ -605,16 +593,16 @@ if __name__ == "__main__":
                 for line, _file_bytes_processed in input_handle.yield_lines():
                     output_lines += 1
                     obj = json.loads(line)
-                    if args.partial or args.regex or args.single_output:
+                    if config["partial"] or config["regex"] or config["single_output"]:
                         observed_case = "output"
                     else:
-                        observed_case = obj[args.field]
+                        observed_case = obj[config["field"]]
                     observed = observed_case.lower()
                     if observed not in output_handles:
-                        if args.output:
-                            if not Path(args.output).exists():
-                                Path(args.output).mkdir(parents=True, exist_ok=True)
-                            output_file_path = Path(args.output) / f"{observed_case}_{FileType.to_str(file_type)}.zst"
+                        if config["output"]:
+                            if not Path(config["output"]).exists():
+                                Path(config["output"]).mkdir(parents=True, exist_ok=True)
+                            output_file_path = Path(config["output"]) / f"{observed_case}_{FileType.to_str(file_type)}.zst"
                         else:
                             output_file_path = f"{observed_case}_{FileType.to_str(file_type)}.zst"
                         msg = f"Writing to file {output_file_path}"
